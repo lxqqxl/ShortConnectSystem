@@ -1,13 +1,12 @@
 #include <unistd.h>
 #include <iostream>
-//#include <sys/socket.h>
-//#include <arpa/inet.h>
-//#include <sys/epoll.h>
-//#include <string.h>
-//#include <string>
-//
-//#include "Myhttp.h"
-#include "Epoll.h"
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <sys/epoll.h>
+#include <string.h>
+#include <string>
+
+#include "Myhttp.h"
 
 using namespace std;
 
@@ -17,7 +16,7 @@ const int MAX_READ_BUFFER_LEN = 1024;
 const int MAX_WRITE_BUFFER_LEN = 1024;
 
 //This var only Test
-//char global_buf[100];
+char global_buf[100];
 
 int setup(char *ip, int port)
 {
@@ -138,7 +137,7 @@ void handle_read(int epollfd, int fd)
 		}
 		else
 		{
-			//memcpy(global_buf, buffer, strlen(buffer));
+			memcpy(global_buf, buffer, strlen(buffer));
 			printf("%s\n", buffer);
 			change_event(epollfd, fd, EPOLLOUT | EPOLLET);
 		}
@@ -166,7 +165,7 @@ void handle_write(int epollfd, int fd)
 	*/
 	
 	MyHttp myhttp;
-	//myhttp.Head_Parsing(global_buf);
+	myhttp.Head_Parsing(global_buf);
 	char *buf = myhttp.Do_Get_Events();
 
 #if 0
@@ -244,15 +243,9 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-#if 0
 	int listenfd = setup(argv[1], atoi(argv[2]));
 
 	do_epoll(listenfd);
-#endif
 
-
-	Epoll epoll;
-	epoll.Setup(argv[1], atoi(argv[2]));
-	epoll.do_epoll();
 	return 0;
 }

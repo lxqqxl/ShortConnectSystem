@@ -1,25 +1,26 @@
-#include <unistd.h>
-#include <iostream>
-//#include <sys/socket.h>
-//#include <arpa/inet.h>
-//#include <sys/epoll.h>
-//#include <string.h>
-//#include <string>
-//
-//#include "Myhttp.h"
 #include "Epoll.h"
 
-using namespace std;
+char global_buf[100];
+Epoll::Epoll()
+{
 
-const int MAX_LISTEN_QUEUE = 10;
-const int MAX_SIZE_EPOLL_EVENTSET = 1024;
-const int MAX_READ_BUFFER_LEN = 1024;
-const int MAX_WRITE_BUFFER_LEN = 1024;
+	if ((epollfd = epoll_create1(EPOLL_CLOEXEC)) < 0)
+	{
+		perror("epoll_create1");
+	}
+}
 
-//This var only Test
-//char global_buf[100];
+Epoll::~Epoll()
+{
+	close(epollfd);
+}
 
-int setup(char *ip, int port)
+/*
+修改时间:2020/2/6
+函数说明:TCP连接初始化
+函数返回:listenfd
+*/
+int Epoll::Setup(char *ip, int port)
 {
 	int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0)
@@ -55,13 +56,14 @@ int setup(char *ip, int port)
 		exit(-1);
 	}
 
+	listenfd = sockfd;
 	return sockfd;
 }
 
 /*
 do epoll event
 */
-void add_event(int epollfd, int fd, int state)
+void Epoll::add_event(int fd, int state)
 {
 	struct epoll_event ev;
 	memset(&ev, 0, sizeof(ev));
@@ -73,7 +75,7 @@ void add_event(int epollfd, int fd, int state)
 		return;
 	}
 }
-void delete_event(int epollfd, int fd, int state)
+void Epoll::delete_event(int fd, int state)
 {
 	struct epoll_event ev;
 	memset(&ev, 0, sizeof(ev));
@@ -85,7 +87,7 @@ void delete_event(int epollfd, int fd, int state)
 		return;
 	}
 }
-void change_event(int epollfd, int fd, int state)
+void Epoll::change_event(int fd, int state)
 {
 	struct epoll_event ev;
 	memset(&ev, 0, sizeof(ev));
@@ -98,8 +100,16 @@ void change_event(int epollfd, int fd, int state)
 	}
 }
 
+/*
+*	修改时间:2020/2/6
+*	函数说明:
+*		handle_accept:处理连接请求
+*		handle_read:处理读事件
+*		handle_write:处理写事件
+*/
+
 //handle_accept
-void handle_accept(int epollfd, int fd)
+void Epoll::handle_accept(int fd)
 {
 	struct sockaddr_in server_inf;
 	memset(&server_inf, 0, sizeof(server_inf));
@@ -114,11 +124,11 @@ void handle_accept(int epollfd, int fd)
 	else
 	{
 		printf("Accept a new connect from ip: %s port: %d\n", inet_ntoa(server_inf.sin_addr), ntohs(server_inf.sin_port));
-		add_event(epollfd, connfd, EPOLLIN | EPOLLET);
+		add_event(connfd, EPOLLIN | EPOLLET);
 	}
 }
 //handle_read
-void handle_read(int epollfd, int fd)
+void Epoll::handle_read(int fd)
 {
 	char buffer[MAX_READ_BUFFER_LEN] = { 0 };
 	int len = read(fd, buffer, sizeof(buffer) - 1);
@@ -138,20 +148,20 @@ void handle_read(int epollfd, int fd)
 		}
 		else
 		{
-			//memcpy(global_buf, buffer, strlen(buffer));
+			memcpy(global_buf, buffer, strlen(buffer));
 			printf("%s\n", buffer);
-			change_event(epollfd, fd, EPOLLOUT | EPOLLET);
+			change_event(fd, EPOLLOUT | EPOLLET);
 		}
 	}
 }
 //handle_write
-void handle_write(int epollfd, int fd)
+void Epoll::handle_write(int fd)
 {
 	char buffer[MAX_WRITE_BUFFER_LEN] = { 0 };
 	/*
 	一下作为测试使用
 	*/
-	
+
 	/*
 	处理Redis
 	*/
@@ -164,9 +174,9 @@ void handle_write(int epollfd, int fd)
 	char buf[100] = { 0 };
 	sprintf(buf, "HTTP1.1 302 ok\r\nConnection:Close\r\nLocation:%s\r\n\r\n", location.c_str());
 	*/
-	
+
 	MyHttp myhttp;
-	//myhttp.Head_Parsing(global_buf);
+	myhttp.Head_Parsing(global_buf);
 	char *buf = myhttp.Do_Get_Events();
 
 #if 0
@@ -175,11 +185,16 @@ void handle_write(int epollfd, int fd)
 
 	write(fd, buf, strlen(buf));
 	//add_event(epollfd, fd, EPOLLIN | EPOLLET);
-	delete_event(epollfd, fd, EPOLLIN);
+	delete_event(fd, EPOLLIN);
 	close(fd);
 }
-//添加到事件处理
-void handle_event(int epollfd, struct epoll_event *eventSet, int num, int listenfd)
+
+/*
+*修改时间:2020/2/6
+*函数说明:分发事件
+*
+*/
+void Epoll::handle_event(struct epoll_event *eventSet, int num, int listenfd)
 {
 	for (int i = 0; i < num; i++)
 	{
@@ -187,26 +202,26 @@ void handle_event(int epollfd, struct epoll_event *eventSet, int num, int listen
 		int fd = eventSet[i].data.fd;
 		if (fd == listenfd && (eventSet[i].events & (EPOLLIN | EPOLLET)))
 		{
-			handle_accept(epollfd, fd);
+			handle_accept(fd);
 		}
 		else if (eventSet[i].events & (EPOLLIN | EPOLLET))
 		{
-			handle_read(epollfd, fd);
+			handle_read(fd);
 		}
 		else if (eventSet[i].events & (EPOLLOUT | EPOLLET))
 		{
-			handle_write(epollfd, fd);
+			handle_write(fd);
 			printf("Write is ok\n");
 		}
 	}
 }
 
-void do_epoll(int listenfd)
+void Epoll::do_epoll()
 {
-	int epollfd = epoll_create1(EPOLL_CLOEXEC);
+	//int epollfd = epoll_create1(EPOLL_CLOEXEC);//initial in constructor
 
 	//add listen to epollfd
-	add_event(epollfd, listenfd, EPOLLIN | EPOLLET);
+	add_event(listenfd, EPOLLIN | EPOLLET);
 
 	struct epoll_event eventSet[MAX_SIZE_EPOLL_EVENTSET];
 
@@ -230,29 +245,7 @@ void do_epoll(int listenfd)
 		}
 		else
 		{
-			handle_event(epollfd, eventSet, num, listenfd);
+			handle_event(eventSet, num, listenfd);
 		}
 	}
-	close(epollfd);
-}
-
-int main(int argc, char *argv[])
-{
-	if (argc != 3)
-	{
-		printf("The input must be %s <ip> <port>\n", argv[0]);
-		return -1;
-	}
-
-#if 0
-	int listenfd = setup(argv[1], atoi(argv[2]));
-
-	do_epoll(listenfd);
-#endif
-
-
-	Epoll epoll;
-	epoll.Setup(argv[1], atoi(argv[2]));
-	epoll.do_epoll();
-	return 0;
 }
