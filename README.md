@@ -6,5 +6,5 @@
 4. epoll_ctl(epollfd, EPOLL_CTL_DEL,  fd, &ev)出错，就是在剔除文件fd的时候必须先在epoll里面剔除，在close掉，不然会报错，不是有效的一个fd
 5. 注意，mysql的字段不能出现关键字，如key这些不然无法正常操作，虽然可以建表
 6. 在操作mysql的时候，对于varchar类型，查找的时候必须要加“”，不然无法正常操作，这是一个小细节，例如：select * from short_connect where short_key = "xianqi";
+<<<<<<< HEAD
 7. 发布订阅模式
-8.  master
