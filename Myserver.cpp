@@ -250,7 +250,7 @@ int main(int argc, char *argv[])
 	do_epoll(listenfd);
 #endif
 
-
+	std::cout << "main" << std::endl;
 	Epoll epoll;
 	epoll.Setup(argv[1], atoi(argv[2]));
 	epoll.do_epoll();
